@@ -148,13 +148,25 @@ async def logout(session_id: str):
         log.info(f"Session {session_id} destroyed.")
     return {"status": "logged_out"}
 
-# 1. Mount the static files from the frontend build
-# 2. Add a catch-all to serve index.html for React routing
-frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))
+# Robust Frontend Discovery
+possible_paths = [
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")),  # Local structure: backend/main.py
+    os.path.abspath(os.path.join(os.getcwd(), "frontend", "dist")),                      # Render root: ./frontend/dist
+    os.path.abspath(os.path.join(os.getcwd(), "..", "frontend", "dist"))                 # Sibling: ../frontend/dist
+]
 
-if os.path.exists(frontend_path):
-    log.info(f"Serving frontend from: {frontend_path}")
-    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_path, "assets")), name="assets")
+frontend_path = None
+for p in possible_paths:
+    if os.path.exists(os.path.join(p, "index.html")):
+        frontend_path = p
+        break
+
+if frontend_path:
+    log.info(f"SUCCESS: Serving frontend from: {frontend_path}")
+    # Mount assets (CSS/JS)
+    assets_dir = os.path.join(frontend_path, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
     
     @app.get("/")
     async def serve_home():
@@ -162,12 +174,11 @@ if os.path.exists(frontend_path):
 
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
-        # Prevent API calls from hitting the frontend catch-all
-        if full_path.startswith("api/") or full_path.startswith("auth/") or full_path.startswith("chats/"):
+        if full_path.startswith(("api/", "auth/", "chats/")):
              raise HTTPException(status_code=404)
         return FileResponse(os.path.join(frontend_path, "index.html"))
 else:
-    log.warning(f"CRITICAL: Frontend build not found at {frontend_path}. Please run 'npm run build' in the frontend folder.")
+    log.error(f"CRITICAL ERROR: Could not find 'frontend/dist' in any of: {possible_paths}")
 
 if __name__ == "__main__":
     import uvicorn
