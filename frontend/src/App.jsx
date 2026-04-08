@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import WebApp from '@twa-dev/sdk';
 import { authApi, chatApi } from './api';
-import { Shield, Send, CheckCircle, Trash2, Loader2, LogOut } from 'lucide-react';
+import { Shield, Send, CheckCircle, Trash2, Loader2, LogOut, Bug } from 'lucide-react';
 
 function App() {
   const [step, setStep] = useState('WELCOME'); // WELCOME, AUTH_PHONE, AUTH_CODE, SELECT_CHATS, CLEANING, DONE
@@ -13,38 +13,47 @@ function App() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [debugLog, setDebugLog] = useState([]);
+
+  const addLog = (msg) => {
+    console.log(msg);
+    setDebugLog(prev => [...prev.slice(-4), `${new Date().toLocaleTimeString()}: ${msg}`]);
+  };
 
   useEffect(() => {
     try {
-      console.log("Initializing Telegram WebApp SDK...");
-      if (WebApp && WebApp.ready) {
+      addLog("Initializing WebApp...");
+      // Check if window.Telegram exists (real TMA environment)
+      const isTelegram = !!(window.Telegram && window.Telegram.WebApp);
+      addLog(`Is Telegram environment: ${isTelegram}`);
+
+      if (isTelegram && WebApp.ready) {
         WebApp.ready();
         WebApp.expand();
         WebApp.setHeaderColor('secondary_bg_color');
-        console.log("SDK Initialized successfully.");
+        addLog("Telegram SDK ready and expanded.");
       } else {
-        console.warn("Telegram WebApp SDK not found or disconnected.");
+        addLog("Running in standard browser mode.");
       }
     } catch (e) {
-      console.error("SDK Init Error:", e);
-      setError("Browser/SDK compatibility issue.");
+      addLog(`Init Error: ${e.message}`);
+      setError(`Startup Error: ${e.message}`);
     }
   }, []);
-
-  // Debugging log for state changes
-  useEffect(() => {
-    console.log("Current App State (Step):", step);
-  }, [step]);
 
   const handleSendCode = async () => {
     setLoading(true);
     setError('');
+    addLog(`Sending code to ${phone}...`);
     try {
       const res = await authApi.sendCode(phone);
       setRequestId(res.data.request_id);
       setStep('AUTH_CODE');
+      addLog("Code sent successfully.");
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to send code');
+      const msg = err.response?.data?.detail || err.message || 'Failed to send code';
+      setError(msg);
+      addLog(`Error: ${msg}`);
     } finally {
       setLoading(false);
     }
@@ -53,12 +62,16 @@ function App() {
   const handleVerifyCode = async () => {
     setLoading(true);
     setError('');
+    addLog("Verifying code...");
     try {
       const res = await authApi.verifyCode(requestId, code);
       setSessionId(res.data.session_id);
+      addLog("Verified. Fetching chats...");
       fetchChats(res.data.session_id);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Invalid code');
+      const msg = err.response?.data?.detail || err.message || 'Invalid code';
+      setError(msg);
+      addLog(`Error: ${msg}`);
     } finally {
       setLoading(false);
     }
@@ -70,8 +83,10 @@ function App() {
       const res = await chatApi.list(sid);
       setChats(res.data.chats);
       setStep('SELECT_CHATS');
+      addLog(`Found ${res.data.chats.length} chats.`);
     } catch (err) {
       setError('Failed to fetch chats');
+      addLog("Error fetching chats.");
     } finally {
       setLoading(false);
     }
@@ -80,14 +95,17 @@ function App() {
   const handleClean = async () => {
     if (selectedIds.length === 0) return;
     setLoading(true);
+    addLog(`Starting cleaning of ${selectedIds.length} chats...`);
     try {
       await chatApi.clean(sessionId, selectedIds);
       setStep('CLEANING');
-      // In a real app, we'd poll or use WebSockets. 
-      // For MVP, we'll just wait a few seconds and show success.
-      setTimeout(() => setStep('DONE'), 3000);
+      setTimeout(() => {
+        setStep('DONE');
+        addLog("Cleaning sequence finished.");
+      }, 3000);
     } catch (err) {
       setError('Cleanup failed to start');
+      addLog("Execution error.");
       setLoading(false);
     }
   };
@@ -100,6 +118,7 @@ function App() {
     setCode('');
     setChats([]);
     setSelectedIds([]);
+    addLog("Logged out.");
   };
 
   const toggleChatSelection = (id) => {
@@ -109,25 +128,23 @@ function App() {
   };
 
   return (
-    <div className="app-container fade-in">
-      {/* Header */}
+    <div className="app-container fade-in" style={{ paddingBottom: '120px' }}>
       <div className="card" style={{ textAlign: 'center', padding: '10px' }}>
         <h1 className="title">TG Cleaner</h1>
       </div>
 
       {error && (
-        <div className="card" style={{ borderColor: 'var(--danger-color)', color: 'var(--danger-color)', fontSize: '14px' }}>
-          {error}
+        <div className="card" style={{ borderColor: 'var(--danger-color)', color: 'var(--danger-color)', fontSize: '13px' }}>
+          <strong>Error:</strong> {error}
         </div>
       )}
 
-      {/* Steps */}
       {step === 'WELCOME' && (
         <div className="card fade-in">
           <Shield className="accent-icon" size={48} style={{ color: 'var(--accent-color)', margin: '0 auto 16px', display: 'block' }} />
           <h2 style={{ textAlign: 'center', marginBottom: '12px' }}>Clear the Clutter</h2>
           <p className="subtitle" style={{ textAlign: 'center' }}>
-            Safely leave multiple channels and groups in seconds. Your session is temporary and never stored.
+            Leave multiple channels safely. Your session is temporary.
           </p>
           <button className="btn" onClick={() => setStep('AUTH_PHONE')}>Get Started</button>
         </div>
@@ -135,39 +152,27 @@ function App() {
 
       {step === 'AUTH_PHONE' && (
         <div className="card fade-in">
-          <h2 style={{ fontSize: '18px', marginBottom: '8px' }}>Login to Telegram</h2>
-          <p className="subtitle">Enter your phone number with country code.</p>
+          <h2 style={{ fontSize: '18px', marginBottom: '8px' }}>Log In</h2>
           <div className="input-group">
             <span className="input-label">Phone Number</span>
-            <input 
-              type="tel" 
-              placeholder="+1234567890" 
-              value={phone} 
-              onChange={(e) => setPhone(e.target.value)} 
-            />
+            <input type="tel" placeholder="+1234567890" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </div>
           <button className="btn" onClick={handleSendCode} disabled={loading || !phone}>
             {loading ? <Loader2 className="animate-spin" /> : 'Send Code'}
           </button>
-          <button className="btn" style={{ background: 'transparent', marginTop: '8px' }} onClick={() => setStep('WELCOME')}>Back</button>
+          <button className="btn" style={{ background: 'transparent', marginTop: '8px', fontSize: '14px' }} onClick={() => setStep('WELCOME')}>Cancel</button>
         </div>
       )}
 
       {step === 'AUTH_CODE' && (
         <div className="card fade-in">
-          <h2 style={{ fontSize: '18px', marginBottom: '8px' }}>Check your Telegram</h2>
-          <p className="subtitle">Enter the 5-digit code sent to your active app.</p>
+          <h2 style={{ fontSize: '18px', marginBottom: '8px' }}>Enter Code</h2>
           <div className="input-group">
-            <span className="input-label">Login Code</span>
-            <input 
-              type="number" 
-              placeholder="12345" 
-              value={code} 
-              onChange={(e) => setCode(e.target.value)} 
-            />
+            <span className="input-label">5-Digit Code</span>
+            <input type="number" placeholder="12345" value={code} onChange={(e) => setCode(e.target.value)} />
           </div>
           <button className="btn" onClick={handleVerifyCode} disabled={loading || code.length < 5}>
-            {loading ? <Loader2 className="animate-spin" /> : 'Verify & Login'}
+            {loading ? <Loader2 className="animate-spin" /> : 'Verify'}
           </button>
         </div>
       )}
@@ -175,27 +180,20 @@ function App() {
       {step === 'SELECT_CHATS' && (
         <div className="fade-in">
           <div className="card" style={{ marginBottom: '12px' }}>
-            <h2 style={{ fontSize: '18px', marginBottom: '4px' }}>Select Groups</h2>
-            <p className="subtitle">{chats.length} chats found. Select to leave.</p>
-            <div style={{ display: 'flex', gap: '8px' }}>
-               <button className="btn" style={{ flex: 1, fontSize: '12px', padding: '8px' }} onClick={() => setSelectedIds(chats.map(c => c.id))}>Select All</button>
-               <button className="btn" style={{ flex: 1, fontSize: '12px', padding: '8px', background: 'var(--tg-theme-secondary-bg-color)' }} onClick={() => setSelectedIds([])}>Deselect</button>
+            <h2 style={{ fontSize: '18px' }}>Select Groups</h2>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+               <button className="btn" style={{ flex: 1, fontSize: '12px', padding: '8px' }} onClick={() => setSelectedIds(chats.map(c => i))}>All</button>
+               <button className="btn" style={{ flex: 1, fontSize: '12px', padding: '8px', background: 'var(--tg-theme-secondary-bg-color)' }} onClick={() => setSelectedIds([])}>None</button>
             </div>
           </div>
-          
-          <div className="chat-list" style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: '100px' }}>
+          <div className="chat-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
             {chats.map(chat => (
-              <div 
-                key={chat.id} 
-                className={`chat-item ${selectedIds.includes(chat.id) ? 'selected' : ''}`}
-                onClick={() => toggleChatSelection(chat.id)}
-              >
+              <div key={chat.id} className={`chat-item ${selectedIds.includes(chat.id) ? 'selected' : ''}`} onClick={() => toggleChatSelection(chat.id)}>
                 <div className="chat-name">{chat.title}</div>
                 {selectedIds.includes(chat.id) && <CheckCircle size={18} style={{ color: 'var(--accent-color)' }} />}
               </div>
             ))}
           </div>
-
           <div style={{ position: 'fixed', bottom: '0', left: '0', right: '0', padding: '16px', background: 'var(--tg-theme-bg-color)', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
              <button className="btn" style={{ background: 'var(--danger-color)' }} onClick={handleClean} disabled={loading || selectedIds.length === 0}>
                 {loading ? <Loader2 className="animate-spin" /> : `Leave ${selectedIds.length} Chats`}
@@ -207,25 +205,30 @@ function App() {
       {step === 'CLEANING' && (
         <div className="card fade-in" style={{ textAlign: 'center' }}>
           <Loader2 className="animate-spin" size={48} style={{ color: 'var(--accent-color)', margin: '0 auto 16px', display: 'block' }} />
-          <h2>Cleaning in Progress...</h2>
-          <p className="subtitle">We are safely removing you from the selected groups. This takes a moment to avoid rate limits.</p>
+          <h2>Cleaning...</h2>
         </div>
       )}
 
       {step === 'DONE' && (
         <div className="card fade-in" style={{ textAlign: 'center' }}>
           <CheckCircle size={48} style={{ color: 'var(--success-color)', margin: '0 auto 16px', display: 'block' }} />
-          <h2>All Done!</h2>
-          <p className="subtitle">Successfully left the selected groups. Your session has been disconnected.</p>
-          <button className="btn" onClick={handleLogout}>Done</button>
+          <h2>Done!</h2>
+          <button className="btn" onClick={handleLogout}>Finish</button>
         </div>
       )}
 
+      {/* Debug Logs Section */}
+      <div className="card" style={{ marginTop: '20px', fontSize: '10px', background: 'rgba(0,0,0,0.4)', borderColor: '#444' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '5px', color: '#888' }}>
+          <Bug size={12} /> Debug Logs (Step: {step})
+        </div>
+        {debugLog.map((log, i) => (
+          <div key={i} style={{ fontFamily: 'monospace', color: '#aaa', marginBottom: '2px' }}>{log}</div>
+        ))}
+      </div>
+
       {sessionId && step !== 'DONE' && (
-        <button 
-          onClick={handleLogout}
-          style={{ position: 'fixed', top: '16px', right: '16px', background: 'transparent', border: 'none', color: 'var(--tg-theme-hint-color)', cursor: 'pointer' }}
-        >
+        <button onClick={handleLogout} style={{ position: 'fixed', top: '16px', right: '16px', background: 'transparent', border: 'none', color: 'var(--tg-theme-hint-color)' }}>
           <LogOut size={20} />
         </button>
       )}
