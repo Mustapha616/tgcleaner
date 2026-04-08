@@ -18,7 +18,10 @@ body {
   background-color: var(--tg-theme-bg-color);
   color: var(--tg-theme-text-color);
   -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  /* Prevent horizontal bounce and ensure full scrolling */
   overflow-x: hidden;
+  touch-action: pan-y;
 }
 
 #root {

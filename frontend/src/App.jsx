@@ -15,10 +15,26 @@ function App() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    WebApp.ready();
-    WebApp.expand();
-    WebApp.setHeaderColor('secondary_bg_color');
+    try {
+      console.log("Initializing Telegram WebApp SDK...");
+      if (WebApp && WebApp.ready) {
+        WebApp.ready();
+        WebApp.expand();
+        WebApp.setHeaderColor('secondary_bg_color');
+        console.log("SDK Initialized successfully.");
+      } else {
+        console.warn("Telegram WebApp SDK not found or disconnected.");
+      }
+    } catch (e) {
+      console.error("SDK Init Error:", e);
+      setError("Browser/SDK compatibility issue.");
+    }
   }, []);
+
+  // Debugging log for state changes
+  useEffect(() => {
+    console.log("Current App State (Step):", step);
+  }, [step]);
 
   const handleSendCode = async () => {
     setLoading(true);
