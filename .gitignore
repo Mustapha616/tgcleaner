@@ -1,0 +1,25 @@
+# Environments
+.env
+backend/.env
+venv/
+backend/venv/
+
+# Telethon Sessions (VITAL SECURITY)
+*.session
+*.session-journal
+backend/*.session
+backend/*.session-journal
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Node / React
+frontend/node_modules/
+frontend/dist/
+.DS_Store
+
+# Logs
+logs/
+*.log
